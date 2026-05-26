@@ -219,6 +219,7 @@
         Recording Timeline
         <div class="timeline-controls">
           <span class="sample-info" id="sampleInfo">Click the chart to inspect</span>
+          <button class="reset-btn save-btn" id="saveBtn" style="display:none" onclick="saveRun()">&#128190; Save Run</button>
           <button class="reset-btn live-btn" id="liveBtn">&#9679; Live</button>
         </div>
       </div>
@@ -228,6 +229,34 @@
           <span class="trim-info" id="trimInfo">Trim: full range</span>
           <button class="trim-btn" id="trimBtn" onclick="analyzeTrimmed()">&#9679; Analyze Trimmed</button>
         </div>
+      </div>
+    </section>
+
+    <!-- Row 3c: Saved Runs & Compare -->
+    <section class="card compare-card" id="compareCard" style="display:none">
+      <div class="card-header">
+        Saved Runs
+        <button class="reset-btn" onclick="clearAllRuns()" title="Delete all saved runs">&#128465; Clear All</button>
+      </div>
+      <div class="compare-controls" id="compareControls" style="display:none">
+        <label>Overlay:</label>
+        <select id="runSelectA" onchange="loadRunCompare('A')"><option value="">Run A...</option></select>
+        <span style="color:var(--text-secondary);font-size:12px">+</span>
+        <select id="runSelectB" onchange="loadRunCompare('B')"><option value="">Run B...</option></select>
+        <button class="compare-btn" onclick="clearCompare()">Clear</button>
+        <button class="compare-btn load-primary-btn" onclick="loadRunPrimary()">&#9654; Load</button>
+      </div>
+      <div class="compare-delta" id="compareDelta"></div>
+    </section>
+
+    <!-- Row 3d: GPS Map View -->
+    <section class="card map-card" id="mapCard" style="display:none">
+      <div class="card-header">
+        GPS Map View
+        <span class="map-info" id="mapInfo">Scroll to zoom · Drag to pan · Double-click to reset</span>
+      </div>
+      <div class="map-body">
+        <canvas id="mapCanvas" class="map-canvas"></canvas>
       </div>
     </section>
 

@@ -499,22 +499,20 @@ function selectSample(idx) {
     lapNumber: 0, racePosition: 0, bestLap: 0, lastLap: 0, currentRaceTime: 0,
     fuel: 0, clutch: 0, handBrake: 0, steer: 0, velocity: { x: 0, y: 0, z: 0 },
     engineMaxRpm: s.rpmMax || 8000, engineIdleRpm: 800,
-    acceleration: { x: 0, y: 0, z: 0 }, angularVelocity: { x: 0, y: 0, z: 0 },
-    yaw: 0, pitch: 0, roll: 0,
-    normalizedSuspensionTravel: { frontLeft: s.stF || 0, frontRight: s.stFR || 0, rearLeft: s.stR || 0, rearRight: s.stRR || 0 },
-    wheelRotationSpeed: { frontLeft: 0, frontRight: 0, rearLeft: 0, rearRight: 0 },
-    wheelOnRumbleStrip: { frontLeft: 0, frontRight: 0, rearLeft: 0, rearRight: 0 },
-    wheelInPuddle: { frontLeft: 0, frontRight: 0, rearLeft: 0, rearRight: 0 },
-    surfaceRumble: { frontLeft: 0, frontRight: 0, rearLeft: 0, rearRight: 0 },
-    suspensionTravelMeters: { frontLeft: 0, frontRight: 0, rearLeft: 0, rearRight: 0 },
+    yaw: s.ya || 0, pitch: 0, roll: 0,
+    position: { x: s.px || 0, y: s.py || 0, z: s.pz || 0 },
+    suspensionTravelMeters: { frontLeft: s.smF || 0, frontRight: s.smFR || 0, rearLeft: s.smR || 0, rearRight: s.smRR || 0 },
+    acceleration: { x: s.ax || 0, y: s.ay || 0, z: s.az || 0 },
+    angularVelocity: { x: 0, y: s.avY || 0, z: 0 },
     carOrdinal: 0, carGroup: 0, smashableVelDiff: 0, smashableMass: 0,
-    position: { x: 0, y: 0, z: 0 }, distanceTraveled: 0,
-    normalizedDrivingLine: 0, normalizedAIBrakeDifference: 0, timestampMs: 0, isRaceOn: 1
+    distanceTraveled: 0, normalizedDrivingLine: 0, normalizedAIBrakeDifference: 0, timestampMs: 0, isRaceOn: 1
   };
   fillTelemetry(fakeData, true);
   $('sampleInfo').textContent = `#${idx + 1}/${sampleHistory.length} — ${(s.s * 3.6).toFixed(0)} km/h · ${s.r.toFixed(0)} RPM`;
   $('liveBtn').textContent = '\u25B6 Live';
   drawTimeline();
+  drawCompareTimeline();
+  redrawMapWithCompare();
 }
 
 function goLive() {
@@ -524,10 +522,11 @@ function goLive() {
   if (header) header.style.display = 'none';
   $('liveBtn').textContent = '\u25CF Live';
   $('sampleInfo').textContent = 'Click the chart to inspect';
+  redrawMapWithCompare();
 }
 
 // ---------- Socket events ----------
-socket.on('connect', () => updateStatus(true));
+socket.on('connect', () => { updateStatus(true); socket.emit('getRunList'); });
 socket.on('disconnect', () => updateStatus(false));
 
 socket.on('serverInfo', (info) => {
@@ -548,10 +547,12 @@ socket.on('recordingState', (state) => {
   if (state.recording) {
     showToast('RECORDING — capturing telemetry data');
     $('timelineCard').style.display = 'none';
+    $('saveBtn').style.display = 'none';
     goLive();
   } else {
     const n = $('sampleCount').textContent;
     $('sessionInfo').textContent = `Based on ${n} captured samples`;
+    if (parseInt(n) >= 2) $('saveBtn').style.display = '';
     showToast(`Recording stopped — ${n} samples analyzed`);
   }
 });
@@ -569,13 +570,23 @@ socket.on('sampleHistory', (samples) => {
     canvas.onmousemove = handleTimelineMouseMove;
     canvas.onmouseleave = handleTimelineMouseLeave;
     document.addEventListener('mouseup', handleTimelineMouseUp);
+    // Reset zoom for new data
+    mapView.zoom = 1;
+    mapView.panX = 0;
+    mapView.panY = 0;
+    mapEventsSetup = false;
     // Initialize trim to full range
     trimStart = 0;
     trimEnd = sampleHistory.length - 1;
     updateTrimInfo();
+    $('saveBtn').style.display = '';
     drawTimeline();
+    drawCompareTimeline();
+    drawMap();
   } else {
     $('timelineCard').style.display = 'none';
+    $('mapCard').style.display = 'none';
+    $('saveBtn').style.display = 'none';
   }
 });
 
@@ -620,6 +631,421 @@ socket.on('analyzeTrimmedResult', (recs) => {
   `).join('');
 });
 
+socket.on('runList', (runs) => {
+  savedRuns = runs || [];
+  populateRunSelectors();
+});
+
+function saveRun() {
+  if (sampleHistory.length < 2) return;
+  socket.emit('saveRun');
+  showToast('Run saved to disk');
+}
+
+function clearAllRuns() {
+  if (!confirm('Delete all saved runs from disk? This cannot be undone.')) return;
+  socket.emit('clearAllRuns');
+  clearCompare();
+  savedRuns = [];
+  $('compareCard').style.display = 'none';
+  populateRunSelectors();
+}
+
+socket.on('runData', ({ runId, samples }) => {
+  if (!samples || samples.length < 2) return;
+  if (!compareRunA) {
+    compareRunA = samples;
+  } else if (!compareRunB) {
+    compareRunB = samples;
+  }
+  drawCompareTimeline();
+  drawCompareMap();
+  updateCompareDelta();
+});
+
+function updateCompareDelta() {
+  if (!compareRunA || !compareRunB) { $('compareDelta').textContent = ''; return; }
+  const sA = compareRunA, sB = compareRunB;
+  const maxSA = Math.max(...sA.map(s => s.s));
+  const maxSB = Math.max(...sB.map(s => s.s));
+  const speedDiff = (maxSA - maxSB) * 3.6;
+  const sign = speedDiff >= 0 ? '+' : '';
+  $('compareDelta').textContent =
+    `Run A top speed: ${(maxSA * 3.6).toFixed(0)} km/h · Run B: ${(maxSB * 3.6).toFixed(0)} km/h (${sign}${speedDiff.toFixed(0)} km/h) · ` +
+    `Samples: ${sA.length} vs ${sB.length}`;
+}
+
+function populateRunSelectors() {
+  if (savedRuns.length === 0) {
+    $('compareCard').style.display = 'none';
+    return;
+  }
+  $('compareCard').style.display = '';
+  $('compareControls').style.display = 'flex';
+  const selA = $('runSelectA');
+  const selB = $('runSelectB');
+  const opts = savedRuns.map(r => {
+    const icon = r.persistent ? '\uD83D\uDCBE ' : '';
+    return `<option value="${r.id}">${icon}${r.label} (${r.maxSpeed} km/h, ${r.samples} samples)</option>`;
+  }).join('');
+  selA.innerHTML = '<option value="">Select run...</option>' + opts;
+  selB.innerHTML = selA.innerHTML;
+}
+
+function loadRunCompare(slot) {
+  const sel = slot === 'A' ? $('runSelectA') : $('runSelectB');
+  const runId = sel.value;
+  if (!runId) return;
+  // Prevent same run in both slots
+  const otherSlot = slot === 'A' ? $('runSelectB') : $('runSelectA');
+  if (otherSlot.value === runId) { sel.value = ''; return; }
+  if (slot === 'A') compareRunA = null;
+  else compareRunB = null;
+  socket.emit('getRunData', { runId });
+}
+
+function clearCompare() {
+  compareRunA = null;
+  compareRunB = null;
+  if ($('runSelectA')) $('runSelectA').value = '';
+  if ($('runSelectB')) $('runSelectB').value = '';
+  $('compareDelta').textContent = '';
+  drawTimeline();
+  drawMap();
+}
+
+function loadRunPrimary() {
+  const sel = $('runSelectA');
+  const runId = sel.value;
+  if (!runId) return;
+  socket.emit('loadRun', { runId });
+}
+
+socket.on('runLoaded', ({ samples, recommendations, label }) => {
+  if (!samples || samples.length < 2) return;
+  sampleHistory = samples;
+  clearCompare();
+  $('recsList').innerHTML = recommendations && recommendations.length
+    ? recommendations.map((r, i) => `
+      <div class="rec-item" style="animation-delay: ${i * 0.03}s">
+        <div class="rec-header"><span class="rec-severity ${r.severity}">${r.severity}</span><span class="rec-area">${r.area}</span></div>
+        <div class="rec-symptom">${r.symptom}</div>
+        <div class="rec-advice">${r.advice}</div>
+      </div>`).join('')
+    : '<div class="recs-placeholder">No issues detected — your tune looks solid!</div>';
+  $('timelineCard').style.display = '';
+  $('sampleInfo').textContent = `${samples.length} samples — ${label}`;
+  $('saveBtn').style.display = '';
+  mapView.zoom = 1;
+  mapView.panX = 0;
+  mapView.panY = 0;
+  mapEventsSetup = false;
+  selectedSampleIndex = -1;
+  isLiveView = true;
+  goLive();
+  // Setup timeline canvas events
+  const canvas = $('timelineCanvas');
+  canvas.onmousedown = handleTimelineMouseDown;
+  canvas.onmousemove = handleTimelineMouseMove;
+  canvas.onmouseleave = handleTimelineMouseLeave;
+  document.addEventListener('mouseup', handleTimelineMouseUp);
+  trimStart = 0;
+  trimEnd = sampleHistory.length - 1;
+  updateTrimInfo();
+  drawTimeline();
+  drawCompareTimeline();
+  drawMap();
+  showToast(`Loaded: ${label}`);
+});
+
+function drawCompareTimeline() {
+  const runs = [compareRunA, compareRunB].filter(Boolean);
+  if (runs.length === 0) { drawTimeline(); return; }
+  // Draw main timeline first
+  drawTimeline();
+  // Overlay additional run(s) as semi-transparent speed lines
+  const canvas = $('timelineCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const PAD = { top: 16, bottom: 24, left: 48, right: 16 };
+  const plotW = W - PAD.left - PAD.right;
+  const plotH = H - PAD.top - PAD.bottom;
+  const nMain = sampleHistory.length;
+  if (nMain < 2) return;
+
+  // Find global max speed across main + compare runs
+  let maxSpeed = 0;
+  for (let i = 0; i < nMain; i++) maxSpeed = Math.max(maxSpeed, sampleHistory[i].s);
+  for (const run of runs) {
+    for (const s of run) maxSpeed = Math.max(maxSpeed, s.s);
+  }
+  maxSpeed = Math.max(maxSpeed, 1);
+
+  const colors = ['#ff9100', '#40c4ff'];
+  const labels = ['Run B', 'Run A'];
+  let li = 0;
+  for (const run of runs) {
+    const isA = run === compareRunA;
+    if (isA && runs.length > 1) continue; // Skip A if B is also shown (A is the base)
+    const nRun = run.length;
+    ctx.strokeStyle = colors[li];
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    for (let i = 0; i < nRun; i++) {
+      const x = PAD.left + (i / (nRun - 1)) * plotW;
+      const y = PAD.top + plotH - (run[i].s / maxSpeed) * plotH;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+    li++;
+  }
+}
+
+// ---------- Map View ----------
+let mapView = {
+  zoom: 1, panX: 0, panY: 0,
+  isPanning: false, pSX: 0, pSY: 0, pSX0: 0, pSY0: 0,
+  scale: 1, ox: 0, oz: 0, W: 0, H: 0, PAD: 12
+};
+
+function mapFitBounds(minX, maxX, minZ, maxZ) {
+  const { W, H, PAD } = mapView;
+  const mapW = W - PAD * 2;
+  const mapH = H - PAD * 2;
+  const rangeX = maxX - minX || 1;
+  const rangeZ = maxZ - minZ || 1;
+  mapView.scale = Math.min(mapW / rangeX, mapH / rangeZ);
+  const cx = (minX + maxX) / 2;
+  const cz = (minZ + maxZ) / 2;
+  mapView.ox = W / 2 - cx * mapView.scale;
+  mapView.oz = H / 2 - cz * mapView.scale;
+}
+
+function mapToScreen(x, z) {
+  const { scale, zoom, ox, oz, panX, panY } = mapView;
+  return { sx: x * scale * zoom + ox + panX, sy: z * scale * zoom + oz + panY };
+}
+
+function drawMap() {
+  const canvas = $('mapCanvas');
+  if (!canvas || sampleHistory.length < 2) return;
+
+  const hasPos = sampleHistory.some(s => s.px !== undefined && s.pz !== undefined && (s.px !== 0 || s.pz !== 0));
+  if (!hasPos) { $('mapCard').style.display = 'none'; return; }
+  $('mapCard').style.display = '';
+
+  const cssRect = canvas.getBoundingClientRect();
+  mapView.W = canvas.width = cssRect.width;
+  mapView.H = canvas.height = cssRect.height = 220;
+  const ctx = canvas.getContext('2d');
+  const PAD = mapView.PAD;
+
+  ctx.clearRect(0, 0, mapView.W, mapView.H);
+
+  const n = sampleHistory.length;
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (let i = 0; i < n; i++) {
+    const s = sampleHistory[i];
+    if (s.px < minX) minX = s.px;
+    if (s.px > maxX) maxX = s.px;
+    if (s.pz < minZ) minZ = s.pz;
+    if (s.pz > maxZ) maxZ = s.pz;
+  }
+  mapFitBounds(minX, maxX, minZ, maxZ);
+
+  const maxS = Math.max(sampleHistory.reduce((m, s) => Math.max(m, s.s), 0), 1);
+
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  for (let i = 1; i < n; i++) {
+    const p0 = mapToScreen(sampleHistory[i - 1].px, sampleHistory[i - 1].pz);
+    const p1 = mapToScreen(sampleHistory[i].px, sampleHistory[i].pz);
+    const t = sampleHistory[i].s / maxS;
+    const r = Math.round(40 + t * (200 - 40));
+    const g = Math.round(230 - t * (230 - 80));
+    const b = Math.round(255 - t * (255 - 40));
+    ctx.strokeStyle = `rgb(${r},${g},${b})`;
+    ctx.beginPath();
+    ctx.moveTo(p0.sx, p0.sy);
+    ctx.lineTo(p1.sx, p1.sy);
+    ctx.stroke();
+  }
+
+  // Start marker
+  const start = mapToScreen(sampleHistory[0].px, sampleHistory[0].pz);
+  ctx.fillStyle = '#00e676';
+  ctx.beginPath(); ctx.arc(start.sx, start.sy, 5, 0, Math.PI * 2); ctx.fill();
+
+  // End marker
+  const end = mapToScreen(sampleHistory[n - 1].px, sampleHistory[n - 1].pz);
+  ctx.fillStyle = '#ff5252';
+  ctx.beginPath(); ctx.arc(end.sx, end.sy, 5, 0, Math.PI * 2); ctx.fill();
+
+  // Scrub cursor
+  if (selectedSampleIndex >= 0 && selectedSampleIndex < n) {
+    const cur = mapToScreen(sampleHistory[selectedSampleIndex].px, sampleHistory[selectedSampleIndex].pz);
+    ctx.strokeStyle = '#ffd740';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(cur.sx, cur.sy, 7, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,215,64,0.3)';
+    ctx.beginPath(); ctx.arc(cur.sx, cur.sy, 7, 0, Math.PI * 2); ctx.fill();
+  }
+
+  $('mapInfo').textContent = mapView.zoom > 1 ? `${mapView.zoom.toFixed(1)}x` : '';
+  setupMapCanvasEvents();
+}
+
+// ---------- Run Storage (Comparison) ----------
+let savedRuns = [];
+let compareRunA = null;
+let compareRunB = null;
+
+function redrawMapWithCompare() {
+  if (compareRunA) {
+    drawCompareMap();
+  } else {
+    drawMap();
+  }
+}
+
+function drawCompareMap() {
+  const canvas = $('mapCanvas');
+  if (!canvas) return;
+  if (!compareRunA && !compareRunB) { $('mapCard').style.display = 'none'; return; }
+  $('mapCard').style.display = '';
+
+  const cssRect = canvas.getBoundingClientRect();
+  mapView.W = canvas.width = cssRect.width;
+  mapView.H = canvas.height = cssRect.height = 220;
+  const ctx = canvas.getContext('2d');
+  const PAD = mapView.PAD;
+
+  ctx.clearRect(0, 0, mapView.W, mapView.H);
+
+  const runs = [compareRunA, compareRunB].filter(Boolean);
+  const colors = ['#40c4ff', '#ff9100'];
+  const labels = ['Run A', 'Run B'];
+
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (const run of runs) {
+    for (const s of run) {
+      if (s.px < minX) minX = s.px;
+      if (s.px > maxX) maxX = s.px;
+      if (s.pz < minZ) minZ = s.pz;
+      if (s.pz > maxZ) maxZ = s.pz;
+    }
+  }
+  mapFitBounds(minX, maxX, minZ, maxZ);
+
+  // Grid
+  const mapW = mapView.W - PAD * 2;
+  const mapH = mapView.H - PAD * 2;
+  ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const fy = PAD + (mapH / 4) * i;
+    ctx.beginPath(); ctx.moveTo(PAD, fy); ctx.lineTo(mapView.W - PAD, fy); ctx.stroke();
+  }
+
+  for (let ri = 0; ri < runs.length; ri++) {
+    const data = runs[ri];
+    ctx.strokeStyle = colors[ri];
+    ctx.lineWidth = ri === 0 ? 3 : 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    for (let i = 0; i < data.length; i++) {
+      const p = mapToScreen(data[i].px, data[i].pz);
+      i === 0 ? ctx.moveTo(p.sx, p.sy) : ctx.lineTo(p.sx, p.sy);
+    }
+    ctx.stroke();
+
+    const st = mapToScreen(data[0].px, data[0].pz);
+    ctx.fillStyle = colors[ri];
+    ctx.beginPath(); ctx.arc(st.sx, st.sy, 4, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Legend
+  ctx.font = '11px monospace';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  let lx = PAD + 4, ly = PAD + 4;
+  for (let ri = 0; ri < runs.length; ri++) {
+    ctx.fillStyle = colors[ri];
+    ctx.fillRect(lx, ly, 10, 10);
+    ctx.fillStyle = 'var(--text-primary)';
+    ctx.fillText(labels[ri], lx + 14, ly - 1);
+    ly += 16;
+  }
+
+  $('mapInfo').textContent = mapView.zoom > 1 ? `${mapView.zoom.toFixed(1)}x` : '';
+  setupMapCanvasEvents();
+}
+
+// ---------- Map Zoom / Pan ----------
+let mapEventsSetup = false;
+
+function setupMapCanvasEvents() {
+  const canvas = $('mapCanvas');
+  if (!canvas || mapEventsSetup) return;
+  mapEventsSetup = true;
+
+  canvas.onwheel = (e) => {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const { scale, ox, oz } = mapView;
+    const dx = (mx - ox - mapView.panX) / (scale * mapView.zoom);
+    const dz = (my - oz - mapView.panY) / (scale * mapView.zoom);
+    const factor = e.deltaY > 0 ? 1 / 1.12 : 1.12;
+    mapView.zoom = Math.max(1, Math.min(50, mapView.zoom * factor));
+    mapView.panX = mx - dx * scale * mapView.zoom - ox;
+    mapView.panY = my - dz * scale * mapView.zoom - oz;
+    canvas.style.cursor = mapView.zoom > 1 ? 'grab' : 'default';
+    redrawMapWithCompare();
+  };
+
+  canvas.onmousedown = (e) => {
+    if (mapView.zoom <= 1) return;
+    mapView.isPanning = true;
+    mapView.pSX = e.clientX;
+    mapView.pSY = e.clientY;
+    mapView.pSX0 = mapView.panX;
+    mapView.pSY0 = mapView.panY;
+    canvas.style.cursor = 'grabbing';
+  };
+
+  canvas.onmousemove = (e) => {
+    if (!mapView.isPanning) return;
+    mapView.panX = mapView.pSX0 + (e.clientX - mapView.pSX);
+    mapView.panY = mapView.pSY0 + (e.clientY - mapView.pSY);
+    redrawMapWithCompare();
+  };
+
+  const stopPan = () => {
+    mapView.isPanning = false;
+    const c = $('mapCanvas');
+    if (c) c.style.cursor = mapView.zoom > 1 ? 'grab' : 'default';
+  };
+  canvas.onmouseup = stopPan;
+  canvas.onmouseleave = stopPan;
+
+  canvas.ondblclick = () => {
+    mapView.zoom = 1;
+    mapView.panX = 0;
+    mapView.panY = 0;
+    const c = $('mapCanvas');
+    if (c) c.style.cursor = 'default';
+    redrawMapWithCompare();
+  };
+}
+
 // ---------- UI Events ----------
 $('recordBtn').addEventListener('click', () => {
   socket.emit(isRecording ? 'stopRecording' : 'startRecording');
@@ -632,12 +1058,18 @@ $('resetBtn').addEventListener('click', () => {
   $('samplesDuringRun').textContent = '0';
   sampleHistory = [];
   $('timelineCard').style.display = 'none';
+  $('mapCard').style.display = 'none';
+  clearCompare();
   goLive();
 });
 
 $('liveBtn').addEventListener('click', goLive);
 
-// Redraw timeline on resize
+// Redraw on resize
 window.addEventListener('resize', () => {
-  if (sampleHistory.length >= 2) drawTimeline();
+  if (sampleHistory.length >= 2) {
+    drawTimeline();
+    drawCompareTimeline();
+    redrawMapWithCompare();
+  }
 });

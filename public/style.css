@@ -738,6 +738,17 @@ h1 {
   cursor: crosshair;
 }
 
+/* Save button */
+.save-btn {
+  border-color: rgba(0,230,118,0.3) !important;
+  color: var(--accent-green) !important;
+}
+
+.save-btn:hover {
+  border-color: var(--accent-green) !important;
+  background: rgba(0,230,118,0.1) !important;
+}
+
 /* Trim controls */
 .trim-controls {
   display: flex;
@@ -769,6 +780,105 @@ h1 {
 .trim-btn:hover {
   background: rgba(0,230,118,0.2);
   border-color: var(--accent-green);
+}
+
+/* Map View */
+.map-card {
+  margin-bottom: 0;
+}
+
+.map-body {
+  padding: 8px 12px;
+}
+
+.map-canvas {
+  width: 100%;
+  height: 220px;
+  display: block;
+  border-radius: 6px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+}
+
+.map-info {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Compare Card */
+.compare-card {
+  margin-bottom: 0;
+}
+
+.compare-card .card-header {
+  justify-content: space-between;
+}
+
+.load-primary-btn {
+  border-color: rgba(0,230,118,0.3) !important;
+  color: var(--accent-green) !important;
+}
+
+.load-primary-btn:hover {
+  background: rgba(0,230,118,0.15) !important;
+  border-color: var(--accent-green) !important;
+}
+
+/* Run Comparison */
+.compare-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  flex-wrap: wrap;
+}
+
+.compare-controls select {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 12px;
+}
+
+.compare-controls label {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.compare-btn {
+  background: rgba(68,138,255,0.1);
+  border: 1px solid rgba(68,138,255,0.3);
+  color: var(--accent-blue);
+  padding: 3px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  transition: all 0.15s;
+}
+
+.compare-btn:hover {
+  background: rgba(68,138,255,0.2);
+  border-color: var(--accent-blue);
+}
+
+.compare-btn.active {
+  background: rgba(68,138,255,0.25);
+  border-color: var(--accent-blue);
+}
+
+.compare-delta {
+  font-size: 11px;
+  color: var(--accent-yellow);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  padding: 0 12px 6px;
 }
 
 /* Race status */
