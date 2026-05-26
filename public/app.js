@@ -829,6 +829,108 @@ function mapToScreen(x, z) {
   return { sx: x * scale * zoom + ox + panX, sy: z * scale * zoom + oz + panY };
 }
 
+function metersPerPx() {
+  return 1 / (mapView.scale * mapView.zoom);
+}
+
+function niceScale(mpp) {
+  const targetPx = 90;
+  const raw = targetPx * mpp;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const lead = raw / mag;
+  let nice;
+  if (lead <= 1) nice = 1;
+  else if (lead <= 2) nice = 2;
+  else if (lead <= 5) nice = 5;
+  else nice = 10;
+  return nice * mag;
+}
+
+function formatDist(meters) {
+  return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${Math.round(meters)} m`;
+}
+
+function computePathDistances(data) {
+  const dists = [0];
+  let total = 0;
+  for (let i = 1; i < data.length; i++) {
+    const dx = data[i].px - data[i - 1].px;
+    const dz = data[i].pz - data[i - 1].pz;
+    total += Math.sqrt(dx * dx + dz * dz);
+    dists.push(total);
+  }
+  return dists;
+}
+
+function drawMapScaleBar(ctx) {
+  const { W, H, PAD } = mapView;
+  const mpp = metersPerPx();
+  const dist = niceScale(mpp);
+  const barPx = dist / mpp;
+  const x = PAD + 6;
+  const y = H - PAD - 10;
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.lineWidth = 1.5;
+  ctx.font = '10px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x + barPx, y);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x, y - 4);
+  ctx.lineTo(x, y + 4);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x + barPx, y - 4);
+  ctx.lineTo(x + barPx, y + 4);
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.fillText(formatDist(dist), x + barPx / 2, y - 4);
+}
+
+function drawMapDistanceMarkers(ctx, data) {
+  const dists = computePathDistances(data);
+  const totalDist = dists[dists.length - 1];
+  if (totalDist < 10) return;
+
+  const interval = niceScale(totalDist / 8);
+  if (interval <= 0) return;
+
+  for (let i = 0; i < dists.length; i++) {
+    const d = dists[i];
+    // Find first sample at or past each interval boundary
+    const mod = d % interval;
+    const nextMod = i < dists.length - 1 ? dists[i + 1] % interval : -1;
+    if (mod < 0.5 || (mod > interval - 0.5)) {
+      if (d < 1) continue;
+      const p = mapToScreen(data[i].px, data[i].pz);
+      ctx.fillStyle = 'rgba(255,255,255,0.15)';
+      ctx.beginPath(); ctx.arc(p.sx, p.sy, 3, 0, Math.PI * 2); ctx.fill();
+      // Label every 5th marker
+      const markerNum = Math.round(d / interval);
+      if (markerNum % 5 === 0) {
+        ctx.fillStyle = 'rgba(255,255,255,0.25)';
+        ctx.font = '9px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(formatDist(d), p.sx, p.sy - 4);
+      }
+    }
+  }
+}
+
+function drawMapTotalInfo(data) {
+  const dists = computePathDistances(data);
+  const total = dists[dists.length - 1];
+  $('mapInfo').textContent = `${formatDist(total)} total` + (mapView.zoom > 1 ? ` · ${mapView.zoom.toFixed(1)}x` : '');
+}
+
 function drawMap() {
   const canvas = $('mapCanvas');
   if (!canvas || sampleHistory.length < 2) return;
@@ -896,7 +998,9 @@ function drawMap() {
     ctx.beginPath(); ctx.arc(cur.sx, cur.sy, 7, 0, Math.PI * 2); ctx.fill();
   }
 
-  $('mapInfo').textContent = mapView.zoom > 1 ? `${mapView.zoom.toFixed(1)}x` : '';
+  drawMapScaleBar(ctx);
+  drawMapDistanceMarkers(ctx, sampleHistory);
+  drawMapTotalInfo(sampleHistory);
   setupMapCanvasEvents();
 }
 
@@ -983,7 +1087,10 @@ function drawCompareMap() {
     ly += 16;
   }
 
-  $('mapInfo').textContent = mapView.zoom > 1 ? `${mapView.zoom.toFixed(1)}x` : '';
+  drawMapScaleBar(ctx);
+  // Show distance markers for the first run only
+  if (runs.length > 0) drawMapDistanceMarkers(ctx, runs[0]);
+  drawMapTotalInfo(runs[0]);
   setupMapCanvasEvents();
 }
 
