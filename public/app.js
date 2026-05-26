@@ -306,32 +306,45 @@ function drawTimeline() {
   ctx.fillText(n + ' samples', PAD.left + plotW / 2, PAD.top + plotH + 4);
 }
 
-function handleTimelineClick(e) {
+let isDragging = false;
+
+function getSampleIndexFromClientX(clientX) {
   const canvas = $('timelineCanvas');
-  if (!canvas || sampleHistory.length < 2) return;
+  if (!canvas || sampleHistory.length < 2) return -1;
   const rect = canvas.getBoundingClientRect();
-  const PAD_LEFT = 48;
-  const plotW = canvas.width - PAD_LEFT - 16;
-  const mx = e.clientX - rect.left - PAD_LEFT;
+  const mx = clientX - rect.left - 48;
+  const plotW = canvas.width - 48 - 16;
   const idx = Math.round((mx / plotW) * (sampleHistory.length - 1));
-  if (idx >= 0 && idx < sampleHistory.length) {
-    selectSample(idx);
-  }
+  if (idx >= 0 && idx < sampleHistory.length) return idx;
+  return -1;
 }
 
-function handleTimelineMove(e) {
-  const canvas = $('timelineCanvas');
-  if (!canvas || sampleHistory.length < 2) return;
-  const rect = canvas.getBoundingClientRect();
-  const PAD_LEFT = 48;
-  const plotW = canvas.width - PAD_LEFT - 16;
-  const mx = e.clientX - rect.left - PAD_LEFT;
-  const idx = Math.round((mx / plotW) * (sampleHistory.length - 1));
-  if (idx >= 0 && idx < sampleHistory.length) {
+function handleTimelineMouseDown(e) {
+  if (sampleHistory.length < 2) return;
+  isDragging = true;
+  const idx = getSampleIndexFromClientX(e.clientX);
+  if (idx >= 0) selectSample(idx);
+}
+
+function handleTimelineMouseMove(e) {
+  if (sampleHistory.length < 2) return;
+  const idx = getSampleIndexFromClientX(e.clientX);
+  if (idx < 0) return;
+  if (isDragging) {
+    selectSample(idx);
+  } else {
     const s = sampleHistory[idx];
     $('sampleInfo').textContent =
       `#${idx + 1}: ${(s.s * 3.6).toFixed(0)} km/h · ${s.r.toFixed(0)} RPM · Gear ${s.g === 0 ? 'R' : s.g} · Throttle ${((s.a / 255) * 100).toFixed(0)}%`;
   }
+}
+
+function handleTimelineMouseUp() {
+  isDragging = false;
+}
+
+function handleTimelineMouseLeave() {
+  isDragging = false;
 }
 
 function selectSample(idx) {
@@ -423,13 +436,12 @@ socket.on('sampleHistory', (samples) => {
   if (sampleHistory.length >= 2) {
     $('timelineCard').style.display = '';
     $('sampleInfo').textContent = `${sampleHistory.length} samples — click to inspect`;
-    // Setup canvas events
+    // Setup drag-to-scrub canvas events
     const canvas = $('timelineCanvas');
-    canvas.onclick = handleTimelineClick;
-    canvas.onmousemove = handleTimelineMove;
-    canvas.onmouseleave = () => {
-      if (selectedSampleIndex < 0) $('sampleInfo').textContent = 'Click the chart to inspect';
-    };
+    canvas.onmousedown = handleTimelineMouseDown;
+    canvas.onmousemove = handleTimelineMouseMove;
+    canvas.onmouseleave = handleTimelineMouseLeave;
+    document.addEventListener('mouseup', handleTimelineMouseUp);
     drawTimeline();
   } else {
     $('timelineCard').style.display = 'none';
