@@ -173,8 +173,8 @@ function drawTimeline() {
   const canvas = $('timelineCanvas');
   if (!canvas || sampleHistory.length < 2) return;
 
-  const rect = canvas.parentElement.getBoundingClientRect();
-  const W = canvas.width = rect.width - 4;
+  const cssRect = canvas.getBoundingClientRect();
+  const W = canvas.width = cssRect.width;
   const H = canvas.height = 180;
   const ctx = canvas.getContext('2d');
   const PAD = { top: 16, bottom: 24, left: 48, right: 16 };
@@ -356,7 +356,8 @@ let isDragging = false;
 
 function xFromIndex(idx) {
   const canvas = $('timelineCanvas');
-  const W = canvas.width;
+  const rect = canvas.getBoundingClientRect();
+  const W = rect.width;
   const n = sampleHistory.length;
   return 48 + (idx / (n - 1)) * (W - 48 - 16);
 }
@@ -366,7 +367,7 @@ function getSampleIndexFromClientX(clientX) {
   if (!canvas || sampleHistory.length < 2) return -1;
   const rect = canvas.getBoundingClientRect();
   const mx = clientX - rect.left - 48;
-  const plotW = canvas.width - 48 - 16;
+  const plotW = rect.width - 48 - 16;
   const idx = Math.round((mx / plotW) * (sampleHistory.length - 1));
   if (idx >= 0 && idx < sampleHistory.length) return idx;
   return -1;
