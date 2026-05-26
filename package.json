@@ -1,0 +1,17 @@
+{
+  "name": "forza-real-tune",
+  "version": "1.2.0",
+  "description": "Forza Horizon 6 telemetry-based tuning analyzer",
+  "main": "src/index.js",
+  "type": "module",
+  "bin": {
+    "forza-real-tune": "./src/index.js"
+  },
+  "dependencies": {
+    "blessed": "^0.1.81",
+    "blessed-contrib": "^4.11.0",
+    "commander": "^12.0.0",
+    "express": "^4.18.2",
+    "socket.io": "^4.7.4"
+  }
+}

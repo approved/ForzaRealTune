@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Forza RealTune</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <div class="logo">
+      <span class="logo-icon">&#9881;</span>
+      <h1>Forza RealTune</h1>
+    </div>
+    <div class="header-info">
+      <div class="stat-badge">
+        <span class="badge-label">Session</span>
+        <span class="badge-value" id="sampleCount">0</span>
+      </div>
+      <div class="stat-badge">
+        <span class="badge-label">Packets</span>
+        <span class="badge-value" id="packetCount">0</span>
+      </div>
+      <div class="hotkey-badge" id="hotkeyBadge" style="display:none">
+        <span class="hk-icon">&#9000;</span>
+        <span id="hotkeyLabel"></span>
+      </div>
+      <button class="record-btn" id="recordBtn" title="Toggle recording">
+        <span class="record-icon">&#9679;</span>
+        <span id="recordLabel">Record</span>
+      </button>
+      <div class="status-indicator" id="statusIndicator">
+        <span class="status-dot"></span>
+        <span id="statusText">Disconnected</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="dashboard">
+    <!-- Recording bar -->
+    <div class="recording-bar" id="recordingBar">
+      <span class="recording-indicator">
+        <span class="rec-dot"></span>
+        RECORDING
+      </span>
+      <span id="samplesDuringRun">0</span> samples captured
+      <span class="recording-hint" id="recordingHint">Press <span id="hotkeyHint">Stop</span> to analyze</span>
+    </div>
+
+    <!-- Row 1: Telemetry Gauges -->
+    <section class="card telemetry-card">
+      <div class="card-header">Live Telemetry</div>
+      <div class="telemetry-grid">
+        <div class="speed-gauge">
+          <div class="gauge-value" id="speedValue">0</div>
+          <div class="gauge-unit">km/h</div>
+          <div class="gauge-sub" id="speedMph">0 mph</div>
+        </div>
+        <div class="telemetry-details">
+          <div class="detail-row">
+            <div class="detail-item">
+              <span class="detail-label">RPM</span>
+              <span class="detail-value" id="rpmValue">0</span>
+              <div class="bar-container"><div class="bar-fill" id="rpmBar" style="width:0%"></div></div>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Gear</span>
+              <span class="detail-value gear-display" id="gearValue">N</span>
+            </div>
+          </div>
+          <div class="detail-row">
+            <div class="detail-item">
+              <span class="detail-label">Power</span>
+              <span class="detail-value" id="powerValue">0</span>
+              <span class="detail-unit">hp</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Torque</span>
+              <span class="detail-value" id="torqueValue">0</span>
+              <span class="detail-unit">Nm</span>
+            </div>
+          </div>
+          <div class="detail-row">
+            <div class="detail-item">
+              <span class="detail-label">Boost</span>
+              <span class="detail-value" id="boostValue">0.0</span>
+              <span class="detail-unit">PSI</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Fuel</span>
+              <span class="detail-value" id="fuelValue">0</span>
+              <span class="detail-unit">%</span>
+              <div class="bar-container"><div class="bar-fill fuel-bar" id="fuelBar" style="width:0%"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Row 2: Car Info + Controls -->
+    <div class="row-2">
+      <section class="card info-card">
+        <div class="card-header">Car Info</div>
+        <div class="info-grid">
+          <div class="info-item">
+            <span class="info-label">Class</span>
+            <span class="info-value" id="carClass">--</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">PI</span>
+            <span class="info-value" id="carPi">--</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Drivetrain</span>
+            <span class="info-value" id="carDrive">--</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Engine</span>
+            <span class="info-value" id="carEngine">--</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Lap</span>
+            <span class="info-value" id="lapNumber">--</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Position</span>
+            <span class="info-value" id="racePosition">--</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="card controls-card">
+        <div class="card-header">Controls</div>
+        <div class="controls-grid">
+          <div class="control-item">
+            <span class="control-label">Accel</span>
+            <div class="control-bar-bg"><div class="control-bar-fill accel-fill" id="accelBar" style="width:0%"></div></div>
+            <span class="control-value" id="accelValue">0</span>
+          </div>
+          <div class="control-item">
+            <span class="control-label">Brake</span>
+            <div class="control-bar-bg"><div class="control-bar-fill brake-fill" id="brakeBar" style="width:0%"></div></div>
+            <span class="control-value" id="brakeValue">0</span>
+          </div>
+          <div class="control-item">
+            <span class="control-label">Steer</span>
+            <div class="control-bar-bg"><div class="control-bar-fill steer-fill" id="steerBar" style="width:50%"></div></div>
+            <span class="control-value" id="steerValue">0</span>
+          </div>
+          <div class="control-item">
+            <span class="control-label">Clutch</span>
+            <div class="control-bar-bg"><div class="control-bar-fill clutch-fill" id="clutchBar" style="width:0%"></div></div>
+            <span class="control-value" id="clutchValue">0</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="card times-card">
+        <div class="card-header">Lap Times</div>
+        <div class="times-grid">
+          <div class="time-item">
+            <span class="time-label">Best</span>
+            <span class="time-value" id="bestLap">--</span>
+          </div>
+          <div class="time-item">
+            <span class="time-label">Last</span>
+            <span class="time-value" id="lastLap">--</span>
+          </div>
+          <div class="time-item">
+            <span class="time-label">Race Time</span>
+            <span class="time-value" id="raceTime">--</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Row 3: Tire Analysis -->
+    <section class="card tires-card">
+      <div class="card-header">Tire Analysis <span class="card-subtitle">Temps &amp; Grip</span></div>
+      <div class="tires-grid">
+        <div class="tire-corner" data-corner="FL">
+          <div class="tire-label">FL</div>
+          <div class="tire-temp-bar"><div class="tire-temp-fill" id="tempFl" style="height:0%"></div></div>
+          <div class="tire-temp-value" id="tempFlValue">--</div>
+          <div class="tire-stat"><span class="ts-label">Slip R:</span><span class="ts-value" id="slipRatioFl">0.00</span></div>
+          <div class="tire-stat"><span class="ts-label">Slip A:</span><span class="ts-value" id="slipAngleFl">0.00</span></div>
+          <div class="tire-stat"><span class="ts-label">Comb:</span><span class="ts-value" id="combinedSlipFl">0.00</span></div>
+        </div>
+        <div class="tire-corner" data-corner="FR">
+          <div class="tire-label">FR</div>
+          <div class="tire-temp-bar"><div class="tire-temp-fill" id="tempFr" style="height:0%"></div></div>
+          <div class="tire-temp-value" id="tempFrValue">--</div>
+          <div class="tire-stat"><span class="ts-label">Slip R:</span><span class="ts-value" id="slipRatioFr">0.00</span></div>
+          <div class="tire-stat"><span class="ts-label">Slip A:</span><span class="ts-value" id="slipAngleFr">0.00</span></div>
+          <div class="tire-stat"><span class="ts-label">Comb:</span><span class="ts-value" id="combinedSlipFr">0.00</span></div>
+        </div>
+        <div class="tire-corner" data-corner="RL">
+          <div class="tire-label">RL</div>
+          <div class="tire-temp-bar"><div class="tire-temp-fill" id="tempRl" style="height:0%"></div></div>
+          <div class="tire-temp-value" id="tempRlValue">--</div>
+          <div class="tire-stat"><span class="ts-label">Slip R:</span><span class="ts-value" id="slipRatioRl">0.00</span></div>
+          <div class="tire-stat"><span class="ts-label">Slip A:</span><span class="ts-value" id="slipAngleRl">0.00</span></div>
+          <div class="tire-stat"><span class="ts-label">Comb:</span><span class="ts-value" id="combinedSlipRl">0.00</span></div>
+        </div>
+        <div class="tire-corner" data-corner="RR">
+          <div class="tire-label">RR</div>
+          <div class="tire-temp-bar"><div class="tire-temp-fill" id="tempRr" style="height:0%"></div></div>
+          <div class="tire-temp-value" id="tempRrValue">--</div>
+          <div class="tire-stat"><span class="ts-label">Slip R:</span><span class="ts-value" id="slipRatioRr">0.00</span></div>
+          <div class="tire-stat"><span class="ts-label">Slip A:</span><span class="ts-value" id="slipAngleRr">0.00</span></div>
+          <div class="tire-stat"><span class="ts-label">Comb:</span><span class="ts-value" id="combinedSlipRr">0.00</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Row 4: Tuning Recommendations -->
+    <section class="card recs-card">
+      <div class="card-header">
+        Tuning Recommendations
+        <div class="recs-actions">
+          <span class="recs-session-info" id="sessionInfo"></span>
+          <button class="reset-btn" id="resetBtn" title="Clear all recorded data">&#8635; New Run</button>
+        </div>
+      </div>
+      <div class="recs-list" id="recsList">
+        <div class="recs-placeholder">Press Record, do a run, then press Stop to analyze</div>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
