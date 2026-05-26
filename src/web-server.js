@@ -105,8 +105,8 @@ export function createWebServer(webPort, listenIp, listenPort, hotkeyStr) {
 
   const cleanup = () => stopHotkeyProcess();
   process.on('exit', cleanup);
-  process.on('SIGINT', cleanup);
-  process.on('SIGTERM', cleanup);
+  process.on('SIGINT', () => { stopHotkeyProcess(); process.exit(0); });
+  process.on('SIGTERM', () => { stopHotkeyProcess(); process.exit(0); });
 
   function start(analyzer, listener) {
     analyzerRef = analyzer;
