@@ -86,21 +86,43 @@ export function createWebServer(webPort, listenIp, listenPort, hotkeyStr) {
     }
   }
 
+  function emitSampleHistory() {
+    if (!analyzerRef || analyzerRef.history.length < 2) return;
+    const samples = analyzerRef.history.map(d => ({
+      s: d.speed,
+      r: d.currentEngineRpm,
+      g: d.gear,
+      a: d.accel,
+      b: d.brake,
+      srF: d.tireSlipRatio.frontLeft,
+      srR: d.tireSlipRatio.rearLeft,
+      rpmMax: d.engineMaxRpm,
+      p: d.power,
+      tq: d.torque,
+      boost: d.boost
+    }));
+    io.emit('sampleHistory', samples);
+  }
+
   function toggleRecording() {
     recording = !recording;
     io.emit('recordingState', { recording });
+    const sampleCount = analyzerRef ? analyzerRef.history.length : 0;
     io.emit('serverInfo', {
       listenIp, listenPort,
       packetCount: totalPackets,
-      sampleCount: analyzerRef ? analyzerRef.history.length : 0,
+      sampleCount,
       connected: true,
       recording,
       hotkey: hotkeyLabel
     });
-    if (!recording && analyzerRef && analyzerRef.history.length >= 10) {
-      io.emit('recommendations', analyzerRef.getRecommendations(carInfo));
+    if (!recording) {
+      if (sampleCount >= 10) {
+        io.emit('recommendations', analyzerRef.getRecommendations(carInfo));
+      }
+      emitSampleHistory();
     }
-    console.log(`Recording: ${recording ? 'ON' : 'OFF (recommendations sent)'}`);
+    console.log(`Recording: ${recording ? 'ON' : 'OFF'}`);
   }
 
   const cleanup = () => stopHotkeyProcess();
@@ -156,6 +178,7 @@ export function createWebServer(webPort, listenIp, listenPort, hotkeyStr) {
           hotkey: hotkeyLabel
         });
         io.emit('recommendations', []);
+        io.emit('sampleHistory', []);
         console.log('Analysis data reset');
       });
 
