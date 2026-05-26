@@ -5,6 +5,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parsePacket } from './parser.js';
+import { TuningAnalyzer } from './analyzer.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicPath = path.join(__dirname, '..', 'public');
@@ -198,6 +199,16 @@ export function createWebServer(webPort, listenIp, listenPort, hotkeyStr) {
         io.emit('recommendations', []);
         io.emit('sampleHistory', []);
         console.log('Analysis data reset');
+      });
+
+      socket.on('analyzeTrimmed', ({ startIdx, endIdx }) => {
+        if (!analyzer || !analyzer.history || analyzer.history.length < 2) return;
+        const temp = new TuningAnalyzer();
+        const slice = analyzer.history.slice(startIdx, endIdx + 1);
+        for (const d of slice) temp.push(d);
+        const recs = temp.getRecommendations(carInfo);
+        socket.emit('analyzeTrimmedResult', recs);
+        console.log(`Trimmed analysis: samples ${startIdx}–${endIdx} (${slice.length} of ${analyzer.history.length})`);
       });
 
       socket.on('disconnect', () => {

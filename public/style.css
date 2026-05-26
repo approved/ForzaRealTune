@@ -738,6 +738,39 @@ h1 {
   cursor: crosshair;
 }
 
+/* Trim controls */
+.trim-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 4px 2px;
+}
+
+.trim-info {
+  font-size: 11px;
+  color: var(--accent-green);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.trim-btn {
+  background: rgba(0,230,118,0.1);
+  border: 1px solid rgba(0,230,118,0.3);
+  color: var(--accent-green);
+  padding: 3px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  transition: all 0.15s;
+}
+
+.trim-btn:hover {
+  background: rgba(0,230,118,0.2);
+  border-color: var(--accent-green);
+}
+
 /* Race status */
 #statusText { font-size: 12px; }
 

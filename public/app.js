@@ -11,6 +11,12 @@ let sampleHistory = [];
 let selectedSampleIndex = -1;
 let isLiveView = true;
 
+// Trim state
+let trimStart = 0;
+let trimEnd = 0;
+let isDraggingTrimStart = false;
+let isDraggingTrimEnd = false;
+
 // ---------- Toast ----------
 function showToast(msg) {
   const el = $('toast');
@@ -304,9 +310,56 @@ function drawTimeline() {
   const duration = ((n / 60).toFixed(1));
   ctx.fillText(duration + 's', PAD.left + plotW, PAD.top + plotH + 4);
   ctx.fillText(n + ' samples', PAD.left + plotW / 2, PAD.top + plotH + 4);
+
+  // ---------- Trim overlay ----------
+  const sx = PAD.left + (trimStart / (n - 1)) * plotW;
+  const ex = PAD.left + (trimEnd / (n - 1)) * plotW;
+
+  // Dimmed region left of trim start
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.fillRect(PAD.left, PAD.top, sx - PAD.left, plotH);
+
+  // Dimmed region right of trim end
+  ctx.fillRect(ex, PAD.top, PAD.left + plotW - ex, plotH);
+
+  // Trim bracket lines
+  ctx.strokeStyle = 'rgba(0,230,118,0.5)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([5, 3]);
+  ctx.beginPath();
+  ctx.moveTo(sx, PAD.top);
+  ctx.lineTo(sx, PAD.top + plotH);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(ex, PAD.top);
+  ctx.lineTo(ex, PAD.top + plotH);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Trim handle triangles at top
+  ctx.fillStyle = '#00e676';
+  ctx.strokeStyle = '#004d40';
+  ctx.lineWidth = 1;
+  [-1, 1].forEach((sign, i) => {
+    const hx = i === 0 ? sx : ex;
+    ctx.beginPath();
+    ctx.moveTo(hx, PAD.top - 2);
+    ctx.lineTo(hx - 7, PAD.top - 2 + 11);
+    ctx.lineTo(hx + 7, PAD.top - 2 + 11);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  });
 }
 
 let isDragging = false;
+
+function xFromIndex(idx) {
+  const canvas = $('timelineCanvas');
+  const W = canvas.width;
+  const n = sampleHistory.length;
+  return 48 + (idx / (n - 1)) * (W - 48 - 16);
+}
 
 function getSampleIndexFromClientX(clientX) {
   const canvas = $('timelineCanvas');
@@ -319,16 +372,70 @@ function getSampleIndexFromClientX(clientX) {
   return -1;
 }
 
+function getClientXY(e) {
+  return e.touches ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : { x: e.clientX, y: e.clientY };
+}
+
+function isNearHandle(clientX, clientY) {
+  const canvas = $('timelineCanvas');
+  if (!canvas) return null;
+  const rect = canvas.getBoundingClientRect();
+  const relY = clientY - rect.top;
+  // Grab zone: top 14px of the plot area
+  if (relY < 16 || relY > 16 + 14) return null;
+  const cx = clientX - rect.left;
+  const sx = xFromIndex(trimStart);
+  const ex = xFromIndex(trimEnd);
+  const threshold = 12;
+  const nearStart = Math.abs(cx - sx) <= threshold;
+  const nearEnd = Math.abs(cx - ex) <= threshold;
+  if (nearStart && nearEnd) {
+    // Prefer whichever handle is closer
+    const dS = Math.abs(cx - sx);
+    const dE = Math.abs(cx - ex);
+    return dS <= dE ? 'start' : 'end';
+  }
+  if (nearStart) return 'start';
+  if (nearEnd) return 'end';
+  return null;
+}
+
 function handleTimelineMouseDown(e) {
   if (sampleHistory.length < 2) return;
+  const pos = getClientXY(e);
+  const handle = isNearHandle(pos.x, pos.y);
+  if (handle === 'start') {
+    isDraggingTrimStart = true;
+    isDragging = false;
+    return;
+  }
+  if (handle === 'end') {
+    isDraggingTrimEnd = true;
+    isDragging = false;
+    return;
+  }
   isDragging = true;
-  const idx = getSampleIndexFromClientX(e.clientX);
+  const idx = getSampleIndexFromClientX(pos.x);
   if (idx >= 0) selectSample(idx);
 }
 
 function handleTimelineMouseMove(e) {
   if (sampleHistory.length < 2) return;
-  const idx = getSampleIndexFromClientX(e.clientX);
+  const pos = getClientXY(e);
+  if (isDraggingTrimStart || isDraggingTrimEnd) {
+    const idx = getSampleIndexFromClientX(pos.x);
+    if (idx < 0) return;
+    if (isDraggingTrimStart) {
+      trimStart = Math.min(idx, trimEnd);
+    }
+    if (isDraggingTrimEnd) {
+      trimEnd = Math.max(idx, trimStart);
+    }
+    updateTrimInfo();
+    drawTimeline();
+    return;
+  }
+  const idx = getSampleIndexFromClientX(pos.x);
   if (idx < 0) return;
   if (isDragging) {
     selectSample(idx);
@@ -341,10 +448,29 @@ function handleTimelineMouseMove(e) {
 
 function handleTimelineMouseUp() {
   isDragging = false;
+  isDraggingTrimStart = false;
+  isDraggingTrimEnd = false;
 }
 
 function handleTimelineMouseLeave() {
   isDragging = false;
+  isDraggingTrimStart = false;
+  isDraggingTrimEnd = false;
+}
+
+function updateTrimInfo() {
+  const info = $('trimInfo');
+  if (!info) return;
+  const total = sampleHistory.length;
+  const trimmed = trimEnd - trimStart + 1;
+  const fromPct = ((trimStart / (total - 1)) * 100).toFixed(0);
+  const toPct = ((trimEnd / (total - 1)) * 100).toFixed(0);
+  info.textContent = `Trim: ${fromPct}%–${toPct}% · ${trimmed} of ${total} samples`;
+}
+
+function analyzeTrimmed() {
+  socket.emit('analyzeTrimmed', { startIdx: trimStart, endIdx: trimEnd });
+  showToast(`Analyzing trimmed range (samples ${trimStart + 1}–${trimEnd + 1})`);
 }
 
 function selectSample(idx) {
@@ -442,6 +568,10 @@ socket.on('sampleHistory', (samples) => {
     canvas.onmousemove = handleTimelineMouseMove;
     canvas.onmouseleave = handleTimelineMouseLeave;
     document.addEventListener('mouseup', handleTimelineMouseUp);
+    // Initialize trim to full range
+    trimStart = 0;
+    trimEnd = sampleHistory.length - 1;
+    updateTrimInfo();
     drawTimeline();
   } else {
     $('timelineCard').style.display = 'none';
@@ -457,6 +587,24 @@ socket.on('recommendations', (recs) => {
   const list = $('recsList');
   if (!recs || recs.length === 0) {
     list.innerHTML = '<div class="recs-placeholder">No issues detected — your tune looks solid!</div>';
+    return;
+  }
+  list.innerHTML = recs.map((r, i) => `
+    <div class="rec-item" style="animation-delay: ${i * 0.03}s">
+      <div class="rec-header">
+        <span class="rec-severity ${r.severity}">${r.severity}</span>
+        <span class="rec-area">${r.area}</span>
+      </div>
+      <div class="rec-symptom">${r.symptom}</div>
+      <div class="rec-advice">${r.advice}</div>
+    </div>
+  `).join('');
+});
+
+socket.on('analyzeTrimmedResult', (recs) => {
+  const list = $('recsList');
+  if (!recs || recs.length === 0) {
+    list.innerHTML = '<div class="recs-placeholder">No issues detected in trimmed range — your tune looks solid!</div>';
     return;
   }
   list.innerHTML = recs.map((r, i) => `
